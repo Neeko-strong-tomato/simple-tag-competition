@@ -1,7 +1,6 @@
 """
-Template for student agent submission.
-
-Students should implement the StudentAgent class for the predator only.
+Agent submission for Simple Tag competition.
+Loads the trained DQN model from rendu.py
 """
 
 import torch
@@ -10,100 +9,68 @@ import numpy as np
 from pathlib import Path
 
 
-class StudentAgent:
-    """
-    Template agent class for Simple Tag competition.
-    
-    Students must implement this class with their own agent logic.
-    The agent should handle only the "predator" type. The prey is provided publicly by the course.
-    """
-    
-    def __init__(self):
-        """
-        Initialize your predator agent.
-        """
-        # Example: Load your trained models
-        # Get the directory where this file is located
-        self.submission_dir = Path(__file__).parent
-        
-        # Example: Load predator model
-        # model_path = self.submission_dir / "predator_model.pth"
-        # self.model = self.load_model(model_path)
-        pass
-    
-    def get_action(self, observation, agent_id: str):
-        """
-        Get action for the given observation.
-        
-        Args:
-            observation: Agent's observation from the environment (numpy array)
-                         - Predator (adversary): shape (14,)
-            agent_id (str): Unique identifier for this agent instance
-            
-        Returns:
-            action: Discrete action in range [0, 4]
-                    0 = no action
-                    1 = move left
-                    2 = move right  
-                    3 = move down
-                    4 = move up
-        """
-        # IMPLEMENT YOUR POLICY HERE
-        
-        # Example random policy (replace with your trained policy):
-        # Action space is Discrete(5) by default
-        # Note: During evaluation, RNGs are seeded per episode for determinism
-        action = np.random.randint(0, 5)
-        
-        return action
-    
-    def load_model(self, model_path):
-        """
-        Helper method to load a PyTorch model.
-        
-        Args:
-            model_path: Path to the .pth file
-            
-        Returns:
-            Loaded model
-        """
-        # Example implementation:
-        # model = YourNeuralNetwork()
-        # if model_path.exists():
-        #     model.load_state_dict(torch.load(model_path, map_location='cpu'))
-        #     model.eval()
-        # return model
-        pass
-
-
-# Example Neural Network Architecture (customize as needed)
-class ExampleNetwork(nn.Module):
-    """
-    Example neural network for the agent.
-    Students should replace this with their own architecture.
-    
-    For discrete action space:
-    - Input: observation (16 dims for prey, 14 dims for predator)
-    - Output: 5 action logits (for Discrete(5) action space)
-    """
-    
-    def __init__(self, input_dim, output_dim=5, hidden_dim=128):
-        super(ExampleNetwork, self).__init__()
+class QNetwork(nn.Module):
+    """Q-Network matching the architecture from rendu.py"""
+    def __init__(self, input_dim=14, hidden_dim=512, output_dim=5):
+        super(QNetwork, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, output_dim)
-            # No activation on output - these are logits for discrete actions
         )
-    
+
     def forward(self, x):
         return self.network(x)
 
 
+class StudentAgent:
+    """
+    Predator agent using trained DQN model.
+    """
+    
+    def __init__(self):
+        """
+        Initialize your predator agent by loading the trained model.
+        """
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Load the trained model
+        self.submission_dir = Path(__file__).parent
+        model_path = self.submission_dir / "predator_model.pth"
+        
+        self.model = QNetwork().to(self.device)
+        if model_path.exists():
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+            self.model.eval()
+        else:
+            raise FileNotFoundError(f"Model file not found: {model_path}")
+    
+    def get_action(self, observation, agent_id: str):
+        """
+        Get action using the trained Q-network.
+        
+        Args:
+            observation: Agent's observation from the environment (numpy array, shape (14,))
+            agent_id (str): Unique identifier for this agent instance
+            
+        Returns:
+            action: Discrete action in range [0, 4]
+        """
+        # Convert observation to tensor
+        obs = torch.FloatTensor(observation).unsqueeze(0).to(self.device)
+        
+        # Get Q-values and select best action
+        with torch.no_grad():
+            q_values = self.model(obs)
+            action = q_values.argmax().item()
+        
+        return action
+
+
 if __name__ == "__main__":
-    # Example usage
+    # Test the agent
     print("Testing StudentAgent...")
     
     # Test predator agent (adversary has 14-dim observation)
@@ -113,4 +80,4 @@ if __name__ == "__main__":
     print(f"Predator observation shape: {predator_obs.shape}")
     print(f"Predator action: {predator_action} (should be in [0, 4])")
     
-    print("✓ Agent template is working!")
+    print("✓ Agent is working!")
